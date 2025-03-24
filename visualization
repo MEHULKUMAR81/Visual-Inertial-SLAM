@@ -1,0 +1,22 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+def plot_trajectories(ekf_landmarks, poses):
+    """Plot the estimated trajectory and landmark positions."""
+    print("Displaying trajectories...")
+    landmarks = ekf_landmarks.get_landmarks()
+    imu_trajectory = np.array([pose[:3, 3] for pose in poses])
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(imu_trajectory[:, 0], imu_trajectory[:, 1], label="IMU Trajectory", color="blue")
+    if landmarks.size > 0:
+        plt.scatter(landmarks[:, 0], landmarks[:, 1], c='red', marker='x', label="Landmarks")
+    else:
+        print("Warning: No landmarks to display.")
+    plt.xlabel("X Position (m)")
+    plt.ylabel("Y Position (m)")
+    plt.title("Trajectory and Landmark Map")
+    plt.legend()
+    plt.grid(True)
+    plt.axis("equal")
+    plt.show()
