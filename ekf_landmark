@@ -1,0 +1,64 @@
+import numpy as np
+from scipy.sparse import lil_matrix
+
+class EKF_Landmark_Mapping:
+    def __init__(self, process_noise_landmarks):
+        """Initialize the EKF for landmark-based mapping."""
+        self.landmarks = {}  # {id: [x, y, z]}
+        self.P = {}          # Covariance matrices for landmarks
+        self.Q = process_noise_landmarks
+        self.landmark_trajectory = {}  # Tracks updates over time
+        print("EKF_Landmark_Mapping initialized.")
+
+    def initialize_landmark(self, landmark_id, z, pose):
+        """Initialize a landmark in world frame from robot pose."""
+        world_coord = pose[:3, 3] + np.random.randn(3) * 0.1
+        self.landmarks[landmark_id] = world_coord
+        self.P[landmark_id] = lil_matrix(np.eye(3) * 1e-2)
+        self.landmark_trajectory[landmark_id] = [world_coord]
+        print(f"Landmark {landmark_id} initialized at {world_coord}")
+
+    def projection(self, landmark_world):
+        """Project 3D world coordinate to 2D camera space."""
+        x, y, z = landmark_world
+        if z == 0:
+            print("Error: Projection failed: z = 0!")
+            return np.array([0, 0])
+        return np.array([x / z, y / z])
+
+    def jacobian(self, landmark_world):
+        """Compute the Jacobian of the projection function."""
+        x, y, z = landmark_world
+        if z == 0:
+            print("Error: Jacobian computation failed: z = 0!")
+            return np.zeros((2, 3))
+        return np.array([
+            [1 / z, 0, -x / (z**2)],
+            [0, 1 / z, -y / (z**2)]
+        ])
+
+    def update_landmark(self, landmark_id, z, pose, R):
+        """EKF update step for a single landmark."""
+        if landmark_id not in self.landmarks:
+            self.initialize_landmark(landmark_id, z, pose)
+            return
+
+        landmark_world = self.landmarks[landmark_id]
+        predicted_z = self.projection(landmark_world)
+        H = self.jacobian(landmark_world)
+        y = z - predicted_z
+        P_dense = self.P[landmark_id].toarray()
+        S = H @ P_dense @ H.T + R  
+        K = P_dense @ H.T @ np.linalg.inv(S)
+        self.landmarks[landmark_id] += K @ y
+        self.P[landmark_id] = lil_matrix((np.eye(3) - K @ H) @ P_dense)
+        self.landmark_trajectory[landmark_id].append(self.landmarks[landmark_id])
+        print(f"Landmark {landmark_id} updated.")
+
+    def get_landmarks(self):
+        """Return current landmark positions."""
+        return np.array(list(self.landmarks.values()))
+
+    def get_landmark_trajectory(self):
+        """Return trajectories of all landmarks."""
+        return self.landmark_trajectory
