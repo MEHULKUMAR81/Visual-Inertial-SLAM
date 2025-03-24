@@ -1,0 +1,86 @@
+
+---
+
+#### **src/main.py**
+
+```python
+# ===============================================
+#              IMPORT LIBRARIES
+# ===============================================
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+from scipy.linalg import expm
+
+from ekf.ekf_landmark import EKF_Landmark_Mapping
+from ekf.se3_utils import se3_hat
+from ekf.ekf_pose_update import update_imu_pose
+
+from features.orb_features import extract_features
+from utils.data_loader import load_dataset
+from utils.visualization import plot_trajectories
+
+# ===============================================
+#               CONFIG & PARAMETERS
+# ===============================================
+DATA_PATH = '../data/dataset01.npy'
+IMG_PATH = '../data/dataset01_imgs.npy'
+
+Q_landmarks = np.eye(3) * 1e-4  
+R_measurement = np.eye(2) * 1e-2  
+Q_imu = np.eye(6) * 1e-4
+
+# ===============================================
+#             MAIN PIPELINE FUNCTION
+# ===============================================
+def main():
+    print("Loading dataset...")
+    data, image_data = load_dataset(DATA_PATH, IMG_PATH)
+
+    v_t = data['v_t']
+    w_t = data['w_t']
+    timestamps = data['timestamps']
+    left_images = image_data['cam_imgs_L']
+    dt_values = np.diff(timestamps, prepend=timestamps[0])
+    print("Data loaded successfully.")
+
+    # === IMU DEAD RECKONING ===
+    poses = [np.eye(4)]
+    print("Performing IMU dead reckoning...")
+    for i in range(1, len(timestamps)):
+        dt = dt_values[i]
+        twist = np.hstack((v_t[i], w_t[i]))
+        exp_twist = expm(se3_hat(twist * dt))
+        new_pose = poses[-1] @ exp_twist
+        poses.append(new_pose)
+    poses = np.array(poses)
+    print("Trajectory computed.")
+
+    # === Initialize SLAM (Landmark Mapping) ===
+    ekf_landmarks = EKF_Landmark_Mapping(Q_landmarks)
+    print("Running Visual-Inertial SLAM...")
+    landmark_counter = 0
+
+    for i, pose in enumerate(poses):
+        if i >= len(left_images):
+            break
+
+        print(f"Processing frame {i+1}/{len(left_images)}...")
+        features = extract_features(left_images[i])
+        for feature in features:
+            ekf_landmarks.update_landmark(landmark_counter, feature, pose, R_measurement)
+            landmark_counter += 1
+
+        # Update the IMU pose using landmarks
+        pose = update_imu_pose(pose, ekf_landmarks.landmarks, ekf_landmarks, R_measurement)
+
+    print("SLAM completed.")
+
+    # === Visualization ===
+    plot_trajectories(ekf_landmarks, poses)
+
+# ===============================================
+#               ENTRY POINT
+# ===============================================
+if __name__ == "__main__":
+    main()
