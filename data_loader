@@ -1,0 +1,17 @@
+import numpy as np
+
+def load_dataset(data_path, img_path):
+    """
+    Load the dataset and image data.
+    
+    Parameters:
+        data_path (str): Path to the dataset .npy file.
+        img_path (str): Path to the images .npy file.
+    
+    Returns:
+        data (dict): Dictionary with IMU and other measurements.
+        image_data (dict): Dictionary with image data.
+    """
+    data = np.load(data_path, allow_pickle=True).item()
+    image_data = np.load(img_path, allow_pickle=True).item()
+    return data, image_data
